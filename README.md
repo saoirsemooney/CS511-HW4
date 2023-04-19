@@ -1,1 +1,2 @@
-"# CS511-HW4" 
+"# CS511-HW4"
+Got it to work
