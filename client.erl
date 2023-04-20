@@ -113,7 +113,7 @@ do_join(State, Ref, ChatName) ->
 			{result, self(), Ref, err};
 		false ->
 			%%client is not in chatroom
-			server ! {self(), Ref, join, ChatName},
+			whereis(server) ! {self(), Ref, join, ChatName},
 			receive
 				{ChatPID, Ref, connect, ChatHistory} ->
 					#cl_st{
@@ -136,7 +136,7 @@ do_leave(State, Ref, ChatName) ->
 			{result, self(), Ref, err};
 		%% client is already in chatroom
 		true ->
-			server ! {self(), Ref, leave, ChatName},
+			whereis(server) ! {self(), Ref, leave, ChatName},
 			receive
 				{_ChatPID, Ref, ack_leave} ->
 					#cl_st{
@@ -161,7 +161,7 @@ do_new_nick(State, Ref, NewNick) ->
 					{result, self(), Ref, err_nick_used}
 			end;
 		true ->
-			server ! {self(), Ref, nick, NewNick},
+			whereis(server) ! {self(), Ref, nick, NewNick},
 			receive
 			{_ChatPID, Ref, ok_nick} ->
 				{result, self(), Ref, ok_nick}
