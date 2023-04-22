@@ -12,7 +12,6 @@
 -spec do_leave(_State, _Ref, _ChatName) -> _.
 -spec do_new_nick(_State, _Ref, _NewNick) -> _.
 -spec do_new_incoming_msg(_State, _Ref, _SenderNick, _ChatName, _Message) -> _.
-
 %% Receive messages from GUI and handle them accordingly
 %% All handling can be done in loop(...)
 main(InitialState) ->
@@ -20,11 +19,13 @@ main(InitialState) ->
     %% This nickname is guaranteed unique system-wide as long as you do not assign a client
     %% the nickname in the form "user[number]" manually such that a new client happens
     %% to generate the same random number as you assigned to your client.
-    whereis(server)!{self(), connect, InitialState#cl_st.nick},
+    whereis(server) ! {self(), connect, InitialState#cl_st.nick},
     %% if running test suite, tell test suite that client is up
     case whereis(testsuite) of
-	undefined -> ok;
-	TestSuitePID -> TestSuitePID!{client_up, self()}
+        undefined ->
+            ok;
+        TestSuitePID ->
+            TestSuitePID ! {client_up, self()}
     end,
     %% Begins listening
     listen(InitialState).
@@ -34,75 +35,69 @@ main(InitialState) ->
 listen(State) ->
     receive
         {request, From, Ref, Request} ->
-	    %% the loop method will return a response as well as an updated
-	    %% state to pass along to the next cycle
+            %% the loop method will return a response as well as an updated
+            %% state to pass along to the next cycle
             {Response, NextState} = loop(State, Request, Ref),
-	    case Response of
-		{dummy_target, Resp} ->
-		    io:format("Use this for whatever you would like~n"),
-		    From!{result, self(), Ref, {dummy_target, Resp}},
-		    listen(NextState);
-		%% if shutdown is received, terminate
-		shutdown ->
-		    ok_shutdown;
-		%% if ok_msg_received, then we don't need to reply to sender.
-		ok_msg_received ->
-		    listen(NextState);
-		%% otherwise, reply to sender with response
-		_ ->
-		    From!{result, self(), Ref, Response},
-		    listen(NextState)
-	    end
+            case Response of
+                {dummy_target, Resp} ->
+                    io:format("Use this for whatever you would like~n"),
+                    From ! {result, self(), Ref, {dummy_target, Resp}},
+                    listen(NextState);
+                %% if shutdown is received, terminate
+                shutdown ->
+                    ok_shutdown;
+                %% if ok_msg_received, then we don't need to reply to sender.
+                ok_msg_received ->
+                    listen(NextState);
+                %% otherwise, reply to sender with response
+                _ ->
+                    From ! {result, self(), Ref, Response},
+                    listen(NextState)
+            end
     end.
 
 %% This function just initializes the default state of a client.
 %% This should only be used by the GUI. Do not change it, as the
 %% GUI code we provide depends on it.
 initial_state(Nick, GUIName) ->
-    #cl_st { gui = GUIName, nick = Nick, con_ch = maps:new() }.
+    #cl_st{gui = GUIName,
+           nick = Nick,
+           con_ch = maps:new()}.
 
 %% ------------------------------------------
 %% loop handles each kind of request from GUI
 %% ------------------------------------------
 loop(State, Request, Ref) ->
     case Request of
-	%% GUI requests to join a chatroom with name ChatName
-	{join, ChatName} ->
-	    do_join(State, Ref, ChatName);
-
-	%% GUI requests to leave a chatroom with name ChatName
-	{leave, ChatName} ->
-	    do_leave(State, Ref, ChatName);
-
-	%% GUI requests to send an outgoing message Message to chatroom ChatName
-	{outgoing_msg, ChatName, Message} ->
-	    do_msg_send(State, Ref, ChatName, Message);
-
-	%% GUI requests the nickname of client
-	whoami ->
-	    {{dummy_target, dummy_response}, State};
-
-	%% GUI requests to update nickname to Nick
-	{nick, Nick} ->
+        %% GUI requests to join a chatroom with name ChatName
+        {join, ChatName} ->
+            do_join(State, Ref, ChatName);
+        %% GUI requests to leave a chatroom with name ChatName
+        {leave, ChatName} ->
+            do_leave(State, Ref, ChatName);
+        %% GUI requests to send an outgoing message Message to chatroom ChatName
+        {outgoing_msg, ChatName, Message} ->
+            do_msg_send(State, Ref, ChatName, Message);
+        %% GUI requests the nickname of client
+        whoami ->
+            {{dummy_target, dummy_response}, State};
+        %% GUI requests to update nickname to Nick
+        {nick, Nick} ->
             do_new_nick(State, Ref, Nick);
-
-	%% GUI requesting to quit completely
-	quit ->
-	    do_quit(State, Ref);
-
-	%% Chatroom with name ChatName has sent an incoming message Message
-	%% from sender with nickname SenderNick
-	{incoming_msg, SenderNick, ChatName, Message} ->
-	    do_new_incoming_msg(State, Ref, SenderNick, ChatName, Message);
-
-	{get_state} ->
-	    {{get_state, State}, State};
-
-	%% Somehow reached a state where we have an unhandled request.
-	%% Without bugs, this should never be reached.
-	_ ->
-	    io:format("Client: Unhandled Request: ~w~n", [Request]),
-	    {unhandled_request, State}
+        %% GUI requesting to quit completely
+        quit ->
+            do_quit(State, Ref);
+        %% Chatroom with name ChatName has sent an incoming message Message
+        %% from sender with nickname SenderNick
+        {incoming_msg, SenderNick, ChatName, Message} ->
+            do_new_incoming_msg(State, Ref, SenderNick, ChatName, Message);
+        {get_state} ->
+            {{get_state, State}, State};
+        %% Somehow reached a state where we have an unhandled request.
+        %% Without bugs, this should never be reached.
+        _ ->
+            io:format("Client: Unhandled Request: ~w~n", [Request]),
+            {unhandled_request, State}
     end.
 
 %% executes `/join` protocol from client perspective
@@ -110,41 +105,43 @@ do_join(State, Ref, ChatName) ->
 	case maps:is_key(ChatName, State#cl_st.con_ch) of
 		true ->
 			%%client is already in chatroom
-			{result, self(), Ref, err};
+			{err, State};
 		false ->
 			%%client is not in chatroom
 			whereis(server) ! {self(), Ref, join, ChatName},
 			receive
 				{ChatPID, Ref, connect, ChatHistory} ->
-					#cl_st{
+					NewState = #cl_st{
 						gui = State#cl_st.gui,
 						nick = State#cl_st.nick,
 						con_ch = maps:put(ChatName, ChatPID, State#cl_st.con_ch)
 					},
-					{result, self(), Ref, ChatHistory}
+					{ChatHistory, NewState}
+					% {result, self(), Ref, ChatHistory}
 				end
-	end.
-					
+	    end.
+
     % io:format("client:do_join(...): IMPLEMENT ME~n"),
     % {{dummy_target, dummy_response}, State}.
 
 %% executes `/leave` protocol from client perspective
 do_leave(State, Ref, ChatName) ->
-	case maps:is_key(ChatName, State#cl_st.con_ch) of
+    case maps:is_key(ChatName, State#cl_st.con_ch) of
 		%% client is not in chatroom
 		false ->
-			{result, self(), Ref, err};
+			{err, State};
 		%% client is already in chatroom
 		true ->
 			whereis(server) ! {self(), Ref, leave, ChatName},
 			receive
 				{_ChatPID, Ref, ack_leave} ->
-					#cl_st{
+					NewState = #cl_st{
 						gui = State#cl_st.gui,
 						nick = State#cl_st.nick,
 						con_ch = maps:remove(ChatName, State#cl_st.con_ch)
 					},
-					{result, self(), Ref, ok}
+					{ok, NewState}
+					% {result, self(), Ref, ok}
 				end
 			end.
 
@@ -153,20 +150,29 @@ do_leave(State, Ref, ChatName) ->
 
 %% executes `/nick` protocol from client perspective
 do_new_nick(State, Ref, NewNick) ->
-	if 
+    if 
 		NewNick == State#cl_st.nick ->
-			{result, self(), Ref, err_same},
-			receive
-				{_ChatPID, Ref, err_nick_used} ->
-					{result, self(), Ref, err_nick_used}
-			end;
+			{err_same, State};
+			% receive
+			% 	{_ChatPID, Ref, err_nick_used} ->
+			% 		{result, self(), Ref, err_nick_used}
+			% end;
 		true ->
 			whereis(server) ! {self(), Ref, nick, NewNick},
 			receive
-			{_ChatPID, Ref, ok_nick} ->
-				{result, self(), Ref, ok_nick}
-			end
+				{_From, Ref, err_nick_used} ->
+					{err_nick_used, State};
+				{_From, Ref, ok_nick} ->
+					NewState = #cl_st{
+						gui = State#cl_st.gui,
+						nick = NewNick,
+						con_ch = State#cl_st.con_ch
+						},
+					{ok_nick, NewState}
+				end
 		end.
+
+
 
     % io:format("client:do_new_nick(...): IMPLEMENT ME~n"),
     % {{dummy_target, dummy_response}, State}.
