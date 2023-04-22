@@ -101,8 +101,7 @@ do_leave(ChatName, ClientPID, Ref, State) ->
 
 %% executes new nickname protocol from server perspective
 do_new_nick(State, Ref, ClientPID, NewNick) ->
-    %%NOT FULLY COMPLETE
-    case lists:member(NewNick, maps:values(State#serv_st.nicks)) of
+   case lists:member(NewNick, maps:values(State#serv_st.nicks)) of
 		%% nickname is already in use
 		true ->
 			ClientPID ! {self(), Ref, err_nick_used},
@@ -110,29 +109,17 @@ do_new_nick(State, Ref, ClientPID, NewNick) ->
 		%% nickname is not in use
 		false ->
 			Func = fun (_, Z) -> lists:member(ClientPID, Z) end,
-			% NewState = #serv_st{
-			% 	nicks = maps:put(ClientPID, NewNick, State#serv_st.nicks),
-			% 	registrations = State#serv_st.registrations,
-			% 	chatrooms = State#serv_st.chatrooms
-			% 	},
-			lists:foreach(fun(_X, Y) -> 
-				case lists:member(ClientPID, Y) of
-					true ->
-						maps:get(Y, State#serv_st.chatrooms)!{self(), Ref, update_nick, ClientPID, NewNick};
-						% {ok, PID} = maps:find(X, State#serv_st.chatrooms),
-						% PID ! {self(), Ref, update_nick, ClientPID, NewNick};
-					false ->
-						false
-					end
-				end,
-				maps:keys(maps:filter(Func, State#serv_st.registrations))),
-				ClientPID ! {self(), Ref, ok_nick},
-				#serv_st{
+			NewState = #serv_st{
 				nicks = maps:put(ClientPID, NewNick, State#serv_st.nicks),
 				registrations = State#serv_st.registrations,
 				chatrooms = State#serv_st.chatrooms
-				}
-				% NewState
+				},
+			lists:foreach(fun(Y) -> 
+						maps:get(Y, State#serv_st.chatrooms)!{self(), Ref, update_nick, ClientPID, NewNick}
+				end,
+				maps:keys(maps:filter(Func, State#serv_st.registrations))),
+				ClientPID ! {self(), Ref, ok_nick},
+				NewState
 			end.
 
 %% executes client quit protocol from server perspective
