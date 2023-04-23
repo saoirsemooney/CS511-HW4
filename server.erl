@@ -122,7 +122,17 @@ do_new_nick(State, Ref, ClientPID, NewNick) ->
 				NewState
 			end.
 
+client_quit_helper(State, Msg, ChatList) ->
+	case ChatList of
+		[] -> ok;
+		[H | T] ->
+			maps:get(H, State#serv_st.chatrooms)!Msg,
+			client_quit_helper(State, Msg, T)
+	end.
 %% executes client quit protocol from server perspective
 do_client_quit(State, Ref, ClientPID) ->
-    io:format("server:do_client_quit(...): IMPLEMENT ME~n"),
-    State.
+	ChatRooms = maps:keys(maps:filter(fun (_K,V) -> lists:member(ClientPID, V) end, State#serv_st.registrations)),
+	client_quit_helper(State, {self(), Ref, unregister, ClientPID}, ChatRooms),
+	Updated = #serv_st{nicks = maps:remove(ClientPID, State#serv_st.nicks), registrations = maps:map(fun(_K, V) -> lists:delete(ClientPID, V) end, State#serv_st.registrations), chatrooms = State#serv_st.chatrooms},
+	ClientPID!{self(), Ref, ack_quit},
+    Updated.
