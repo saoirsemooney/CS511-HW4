@@ -184,7 +184,7 @@ do_msg_send(State, Ref, ChatName, Message) ->
 			ChatPID!{self(), Ref, message, Message},
 			receive
 				{_ChatPID, Ref, ack_msg} ->
-					whereis(list_to_atom(State#cl_st.gui))!{result, self(), Ref, {msg_sent, State#cl_st.nick}}
+					{{msg_sent, State#cl_st.nick}, State}
 			end;
 		error -> ok
 	end.
