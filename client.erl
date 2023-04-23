@@ -201,6 +201,5 @@ do_quit(State, Ref) ->
     receive
 		{_From, Ref, ack_quit} ->
 			io:format("Client ~s quit~n", [State#cl_st.nick]),
-            whereis(list_to_atom(State#cl_st.gui))!{self(), Ref, ack_quit}
-			%{ack_quit, State}
+			{ack_quit, State}
 	end.
